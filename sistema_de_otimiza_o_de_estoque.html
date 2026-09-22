@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptiStock - Sistema Inteligente de Otimização de Estoque</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+
+    <!-- External Libraries: Chart.js, Lucide Icons, Alpine.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="h-full overflow-hidden flex flex-col" x-data="inventoryApp()" x-init="initApp()">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700 px-6 py-3 flex items-center justify-between shrink-0 z-20">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-cyan-500 to-blue-600 p-2.5 rounded-xl shadow-lg shadow-cyan-500/20">
+                <i data-lucide="boxes" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-white flex items-center gap-2">
+                    OptiStock 
+                    <span class="text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full">v2.5 Pro</span>
+                </h1>
+                <p class="text-xs text-slate-400">Sistema Inteligente para Otimização de Estoque & Gestão EOQ/ROP</p>
+            </div>
+        </div>
+
+        <!-- Header Actions -->
+        <div class="flex items-center space-x-3">
+            <button @click="openNewItemModal()" class="flex items-center space-x-1.5 bg-cyan-600 hover:bg-cyan-500 text-white px-3.5 py-2 rounded-lg text-xs font-medium transition shadow-md shadow-cyan-600/20">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>Novo SKU</span>
+            </button>
+            <button @click="exportCSV()" class="flex items-center space-x-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3.5 py-2 rounded-lg text-xs font-medium transition border border-slate-600">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                <span>Exportar CSV</span>
+            </button>
+            <button @click="confirmResetData()" title="Restaurar dados de demonstração" class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg transition border border-slate-700">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 bg-slate-800/40 border-r border-slate-700/80 flex flex-col justify-between shrink-0 p-4">
+            <nav class="space-y-1.5">
+                <p class="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Módulos do Sistema</p>
+
+                <button @click="switchTab('dashboard')" :class="activeTab === 'dashboard' ? 'bg-cyan-600/15 text-cyan-400 border-cyan-500/40 font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-transparent'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm border transition">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    <span>Painel Executivo</span>
+                </button>
+
+                <button @click="switchTab('skus')" :class="activeTab === 'skus' ? 'bg-cyan-600/15 text-cyan-400 border-cyan-500/40 font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-transparent'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm border transition">
+                    <i data-lucide="package-search" class="w-4 h-4"></i>
+                    <span>Gestão de SKUs</span>
+                    <span x-text="skus.length" class="ml-auto text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full"></span>
+                </button>
+
+                <button @click="switchTab('eoq-calculator')" :class="activeTab === 'eoq-calculator' ? 'bg-cyan-600/15 text-cyan-400 border-cyan-500/40 font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-transparent'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm border transition">
+                    <i data-lucide="calculator" class="w-4 h-4"></i>
+                    <span>Simulador EOQ & ROP</span>
+                </button>
+
+                <button @click="switchTab('abc-analysis')" :class="activeTab === 'abc-analysis' ? 'bg-cyan-600/15 text-cyan-400 border-cyan-500/40 font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-transparent'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm border transition">
+                    <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                    <span>Curva ABC (Pareto)</span>
+                </button>
+
+                <button @click="switchTab('replenishment')" :class="activeTab === 'replenishment' ? 'bg-cyan-600/15 text-cyan-400 border-cyan-500/40 font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-transparent'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm border transition">
+                    <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+                    <span>Ordens de Compras</span>
+                    <span x-show="reorderAlertCount > 0" x-text="reorderAlertCount" class="ml-auto text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold"></span>
+                </button>
+            </nav>
+
+            <!-- Bottom System Specs Panel -->
+            <div class="bg-slate-900/60 rounded-xl p-3 border border-slate-700/60 text-xs text-slate-400 space-y-1.5">
+                <div class="flex justify-between font-medium text-slate-300">
+                    <span>Parâmetros Ativos:</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Nível de Serviço:</span>
+                    <span class="text-cyan-400 font-semibold" x-text="globalServiceLevel + '%'"></span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Taxa de Posse:</span>
+                    <span class="text-emerald-400 font-semibold" x-text="(globalHoldingRate * 100) + '% /ano'"></span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Dynamic Content Area -->
+        <main class="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-900">
+
+            <!-- Global KPI Summary Bar -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 flex items-center justify-between relative overflow-hidden shadow-sm">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Valor Total em Estoque</p>
+                        <h3 class="text-2xl font-bold text-slate-100 mt-1" x-text="formatCurrency(totalInventoryValue)"></h3>
+                        <p class="text-[11px] text-slate-400 mt-1">
+                            <span class="text-emerald-400 font-semibold" x-text="skus.length + ' SKUs cadastrados'"></span>
+                        </p>
+                    </div>
+                    <div class="p-3 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl">
+                        <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 flex items-center justify-between relative overflow-hidden shadow-sm">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Alertas Reabastecimento</p>
+                        <h3 class="text-2xl font-bold text-amber-400 mt-1" x-text="reorderAlertCount"></h3>
+                        <p class="text-[11px] text-slate-400 mt-1">
+                            <span x-text="criticalCount + ' SKUs em nível crítico'" class="text-rose-400 font-medium"></span>
+                        </p>
+                    </div>
+                    <div class="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl">
+                        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 flex items-center justify-between relative overflow-hidden shadow-sm">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Giro Anual Estimado</p>
+                        <h3 class="text-2xl font-bold text-emerald-400 mt-1" x-text="averageTurnover.toFixed(1) + 'x /ano'"></h3>
+                        <p class="text-[11px] text-slate-400 mt-1">Média do inventário</p>
+                    </div>
+                    <div class="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                        <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 flex items-center justify-between relative overflow-hidden shadow-sm">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Custo Anual de Posse</p>
+                        <h3 class="text-2xl font-bold text-purple-400 mt-1" x-text="formatCurrency(totalHoldingCost)"></h3>
+                        <p class="text-[11px] text-slate-400 mt-1">Armazenamento & Capital</p>
+                    </div>
+                    <div class="p-3 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl">
+                        <i data-lucide="warehouse" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 1: EXECUTIVE DASHBOARD -->
+            <div x-show="activeTab === 'dashboard'" class="space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Chart 1: Stock Level vs ROP vs Safety Stock -->
+                    <div class="lg:col-span-2 bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5 shadow-sm flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="font-semibold text-slate-100 flex items-center gap-2">
+                                    <i data-lucide="layers" class="w-5 h-5 text-cyan-400"></i>
+                                    Status dos SKUs: Estoque Atual vs. Ponto de Pedido (ROP)
+                                </h3>
+                                <p class="text-xs text-slate-400">Nível atual em relação à margem de segurança e gatilho de ressuprimento.</p>
+                            </div>
+                        </div>
+                        <div class="h-72 relative w-full flex-1 min-h-[280px]">
+                            <canvas id="stockStatusChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Distribution Chart: ABC Breakdown -->
+                    <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5 shadow-sm flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="font-semibold text-slate-100 flex items-center gap-2">
+                                    <i data-lucide="pie-chart" class="w-5 h-5 text-indigo-400"></i>
+                                    Distribuição de Valor (ABC)
+                                </h3>
+                                <p class="text-xs text-slate-400">Proporção do valor imobilizado por classe.</p>
+                            </div>
+                        </div>
+                        <div class="h-60 relative flex justify-center items-center my-auto min-h-[220px]">
+                            <canvas id="abcPieChart"></canvas>
+                        </div>
+                        <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                            <div class="p-2 bg-slate-900/60 rounded-lg border border-slate-700/60">
+                                <span class="font-bold text-amber-400 block">Classe A</span>
+                                <span class="text-slate-400" x-text="abcClassA.length + ' SKUs'"></span>
+                            </div>
+                            <div class="p-2 bg-slate-900/60 rounded-lg border border-slate-700/60">
+                                <span class="font-bold text-blue-400 block">Classe B</span>
+                                <span class="text-slate-400" x-text="abcClassB.length + ' SKUs'"></span>
+                            </div>
+                            <div class="p-2 bg-slate-900/60 rounded-lg border border-slate-700/60">
+                                <span class="font-bold text-emerald-400 block">Classe C</span>
+                                <span class="text-slate-400" x-text="abcClassC.length + ' SKUs'"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Urgent Replenishment Action Table -->
+                <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="font-semibold text-slate-100 flex items-center gap-2">
+                                <i data-lucide="bell" class="w-5 h-5 text-amber-400"></i>
+                                Itens Requerendo Ação Imediata (Abaixo ou no ROP)
+                            </h3>
+                            <p class="text-xs text-slate-400">Produtos que atingiram o gatilho de reabastecimento.</p>
+                        </div>
+                        <button @click="switchTab('replenishment')" class="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-medium">
+                            Ver ordens de compra <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-300">
+                            <thead class="text-xs text-slate-400 uppercase bg-slate-900/60 border-b border-slate-700">
+                                <tr>
+                                    <th class="py-3 px-4">SKU / Produto</th>
+                                    <th class="py-3 px-4 text-center">Classe ABC</th>
+                                    <th class="py-3 px-4 text-center">Estoque Atual</th>
+                                    <th class="py-3 px-4 text-center">Ponto Pedido (ROP)</th>
+                                    <th class="py-3 px-4 text-center">EOQ Sugerido</th>
+                                    <th class="py-3 px-4 text-center">Status</th>
+                                    <th class="py-3 px-4 text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700/60">
+                                <template x-for="item in getUrgentSKUs()" :key="item.id">
+                                    <tr class="hover:bg-slate-800/40 transition">
+                                        <td class="py-3 px-4 font-medium text-slate-100">
+                                            <div class="font-semibold" x-text="item.name"></div>
+                                            <div class="text-xs text-slate-400 font-mono" x-text="item.code"></div>
+                                        </td>
+                                        <td class="py-3 px-4 text-center">
+                                            <span class="px-2 py-0.5 rounded text-xs font-bold"
+                                                  :class="item.abc === 'A' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : item.abc === 'B' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'"
+                                                  x-text="'Classe ' + item.abc"></span>
+                                        </td>
+                                        <td class="py-3 px-4 text-center font-bold" :class="item.currentStock <= item.safetyStock ? 'text-rose-400' : 'text-amber-400'" x-text="item.currentStock"></td>
+                                        <td class="py-3 px-4 text-center text-slate-300 font-semibold" x-text="calcROP(item)"></td>
+                                        <td class="py-3 px-4 text-center text-cyan-400 font-bold" x-text="calcEOQ(item) + ' un'"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <span x-show="item.currentStock <= calcSafetyStock(item)" class="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1">
+                                                <i data-lucide="shield-alert" class="w-3 h-3"></i> Crítico
+                                            </span>
+                                            <span x-show="item.currentStock > calcSafetyStock(item) && item.currentStock <= calcROP(item)" class="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1">
+                                                <i data-lucide="alert-circle" class="w-3 h-3"></i> Reabastecer
+                                            </span>
+                                        </td>
+                                        <td class="py-3 px-4 text-right">
+                                            <button @click="triggerReplenish(item.id)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition shadow-sm">
+                                                Pedir Lote EOQ
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="getUrgentSKUs().length === 0">
+                                    <tr>
+                                        <td colspan="7" class="py-8 text-center text-slate-400">
+                                            <i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80"></i>
+                                            Nenhum item em nível crítico ou de reabastecimento pendente.
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: SKU MANAGEMENT TABLE -->
+            <div x-show="activeTab === 'skus'" class="space-y-4">
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+                    <div class="relative w-full md:w-80">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" x-model="searchQuery" placeholder="Buscar por código ou nome..." class="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-cyan-500 text-slate-200">
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                        <select x-model="selectedCategory" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">Todas as Categorias</option>
+                            <template x-for="cat in categories" :key="cat">
+                                <option :value="cat" x-text="cat"></option>
+                            </template>
+                        </select>
+
+                        <select x-model="selectedABC" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">Todas as Classes ABC</option>
+                            <option value="A">Classe A</option>
+                            <option value="B">Classe B</option>
+                            <option value="C">Classe C</option>
+                        </select>
+
+                        <select x-model="selectedStatus" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">Todos os Status</option>
+                            <option value="CRITICAL">Crítico</option>
+                            <option value="REORDER">Abaixo ROP</option>
+                            <option value="OPTIMAL">Ideal</option>
+                            <option value="OVERSTOCK">Excesso</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Main SKU Table -->
+                <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl overflow-hidden shadow-sm">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-300">
+                            <thead class="text-xs text-slate-400 uppercase bg-slate-900/80 border-b border-slate-700">
+                                <tr>
+                                    <th class="py-3.5 px-4 cursor-pointer hover:text-cyan-400" @click="sortBy('code')">Código</th>
+                                    <th class="py-3.5 px-4 cursor-pointer hover:text-cyan-400" @click="sortBy('name')">Produto</th>
+                                    <th class="py-3.5 px-4 text-right cursor-pointer hover:text-cyan-400" @click="sortBy('unitCost')">Custo Unit.</th>
+                                    <th class="py-3.5 px-4 text-center cursor-pointer hover:text-cyan-400" @click="sortBy('annualDemand')">Demanda Anual</th>
+                                    <th class="py-3.5 px-4 text-center">Lead Time</th>
+                                    <th class="py-3.5 px-4 text-center">Estoque Atual</th>
+                                    <th class="py-3.5 px-4 text-center">Est. Seg.</th>
+                                    <th class="py-3.5 px-4 text-center font-semibold text-cyan-400">ROP</th>
+                                    <th class="py-3.5 px-4 text-center font-semibold text-emerald-400">EOQ</th>
+                                    <th class="py-3.5 px-4 text-center">Status</th>
+                                    <th class="py-3.5 px-4 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700/60">
+                                <template x-for="sku in filteredSKUs" :key="sku.id">
+                                    <tr class="hover:bg-slate-800/40 transition">
+                                        <td class="py-3 px-4 font-mono text-xs text-slate-400 font-bold" x-text="sku.code"></td>
+                                        <td class="py-3 px-4">
+                                            <div class="font-medium text-slate-100" x-text="sku.name"></div>
+                                            <div class="text-xs text-slate-400" x-text="sku.category"></div>
+                                        </td>
+                                        <td class="py-3 px-4 text-right font-mono text-slate-200" x-text="formatCurrency(sku.unitCost)"></td>
+                                        <td class="py-3 px-4 text-center font-mono" x-text="sku.annualDemand + ' un'"></td>
+                                        <td class="py-3 px-4 text-center text-slate-300" x-text="sku.leadTimeDays + 'd'"></td>
+                                        <td class="py-3 px-4 text-center font-bold">
+                                            <div class="inline-flex items-center gap-1.5 bg-slate-900/60 px-2 py-1 rounded-lg border border-slate-700">
+                                                <button @click="adjustStock(sku, -10)" class="text-slate-400 hover:text-rose-400 font-bold px-1" title="Subtrair 10 un">-</button>
+                                                <span x-text="sku.currentStock" :class="getStockColorClass(sku)"></span>
+                                                <button @click="adjustStock(sku, 10)" class="text-slate-400 hover:text-emerald-400 font-bold px-1" title="Adicionar 10 un">+</button>
+                                            </div>
+                                        </td>
+                                        <td class="py-3 px-4 text-center text-slate-400 font-mono" x-text="calcSafetyStock(sku)"></td>
+                                        <td class="py-3 px-4 text-center font-bold text-cyan-400 font-mono" x-text="calcROP(sku)"></td>
+                                        <td class="py-3 px-4 text-center font-bold text-emerald-400 font-mono" x-text="calcEOQ(sku)"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <span x-html="getStatusBadgeHTML(sku)"></span>
+                                        </td>
+                                        <td class="py-3 px-4 text-right space-x-1">
+                                            <button @click="openEditModal(sku)" class="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-700 rounded-lg transition" title="Editar SKU">
+                                                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                            </button>
+                                            <button @click="openSimulatorForSKU(sku)" class="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded-lg transition" title="Simular no EOQ Engine">
+                                                <i data-lucide="calculator" class="w-4 h-4"></i>
+                                            </button>
+                                            <button @click="confirmDeleteSKU(sku.id)" class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-700 rounded-lg transition" title="Excluir SKU">
+                                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: ADVANCED EOQ & ROP CALCULATOR / SIMULATOR -->
+            <div x-show="activeTab === 'eoq-calculator'" class="space-y-6">
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                                <i data-lucide="cpu" class="w-5 h-5 text-cyan-400"></i>
+                                Simulador de Curva de Custo Total & Otimizador EOQ
+                            </h2>
+                            <p class="text-xs text-slate-400">Ajuste os parâmetros logísticos para calcular o Lote Econômico de Compras ótimo.</p>
+                        </div>
+
+                        <div class="w-64">
+                            <label class="block text-xs text-slate-400 mb-1">SKU de Referência:</label>
+                            <select x-model="sim.selectedSkuId" @change="loadSKUToSimulator()" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl p-2 focus:outline-none focus:border-cyan-500">
+                                <template x-for="item in skus" :key="item.id">
+                                    <option :value="item.id" x-text="item.code + ' - ' + item.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Controls -->
+                        <div class="bg-slate-900/60 border border-slate-700/60 rounded-xl p-4 space-y-4">
+                            <h3 class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Parâmetros de Entrada</h3>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300">Demanda Anual (D):</span>
+                                    <span class="font-bold text-cyan-400" x-text="sim.annualDemand + ' un/ano'"></span>
+                                </div>
+                                <input type="range" min="100" max="20000" step="100" x-model.number="sim.annualDemand" @input="updateEOQChart()" class="w-full accent-cyan-500">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300">Custo de Pedido (S):</span>
+                                    <span class="font-bold text-cyan-400" x-text="formatCurrency(sim.orderCost)"></span>
+                                </div>
+                                <input type="range" min="10" max="1000" step="10" x-model.number="sim.orderCost" @input="updateEOQChart()" class="w-full accent-cyan-500">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300">Custo Unitário (C):</span>
+                                    <span class="font-bold text-cyan-400" x-text="formatCurrency(sim.unitCost)"></span>
+                                </div>
+                                <input type="range" min="1" max="1500" step="5" x-model.number="sim.unitCost" @input="updateEOQChart()" class="w-full accent-cyan-500">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300">Taxa de Carregamento (H%/ano):</span>
+                                    <span class="font-bold text-cyan-400" x-text="(sim.holdingRate * 100).toFixed(0) + '%'"></span>
+                                </div>
+                                <input type="range" min="0.05" max="0.50" step="0.01" x-model.number="sim.holdingRate" @input="updateEOQChart()" class="w-full accent-cyan-500">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300">Lead Time (Dias):</span>
+                                    <span class="font-bold text-cyan-400" x-text="sim.leadTimeDays + ' dias'"></span>
+                                </div>
+                                <input type="range" min="1" max="60" step="1" x-model.number="sim.leadTimeDays" @input="updateEOQChart()" class="w-full accent-cyan-500">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-300">Nível de Serviço Desejado:</span>
+                                    <span class="font-bold text-emerald-400" x-text="sim.serviceLevel + '%'"></span>
+                                </div>
+                                <select x-model.number="sim.serviceLevel" @change="updateEOQChart()" class="w-full bg-slate-800 border border-slate-700 text-xs rounded-lg p-2 text-slate-200">
+                                    <option value="90">90% (Z = 1.28)</option>
+                                    <option value="95">95% (Z = 1.65 - Padrão)</option>
+                                    <option value="98">98% (Z = 2.05)</option>
+                                    <option value="99">99% (Z = 2.33)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Results Dashboard & Chart -->
+                        <div class="lg:col-span-2 flex flex-col space-y-4">
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div class="bg-slate-900/60 p-3 rounded-xl border border-cyan-500/30">
+                                    <span class="text-[11px] text-slate-400 block">Lote Econômico (EOQ)</span>
+                                    <span class="text-xl font-extrabold text-cyan-400" x-text="calcSimEOQ() + ' un'"></span>
+                                </div>
+                                <div class="bg-slate-900/60 p-3 rounded-xl border border-emerald-500/30">
+                                    <span class="text-[11px] text-slate-400 block">Estoque de Segurança</span>
+                                    <span class="text-xl font-extrabold text-emerald-400" x-text="calcSimSafetyStock() + ' un'"></span>
+                                </div>
+                                <div class="bg-slate-900/60 p-3 rounded-xl border border-amber-500/30">
+                                    <span class="text-[11px] text-slate-400 block">Ponto de Pedido (ROP)</span>
+                                    <span class="text-xl font-extrabold text-amber-400" x-text="calcSimROP() + ' un'"></span>
+                                </div>
+                                <div class="bg-slate-900/60 p-3 rounded-xl border border-purple-500/30">
+                                    <span class="text-[11px] text-slate-400 block">Custo Mínimo Total</span>
+                                    <span class="text-xl font-extrabold text-purple-400" x-text="formatCurrency(calcSimMinCost())"></span>
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-900/60 border border-slate-700/60 rounded-xl p-4 flex-1 flex flex-col">
+                                <h4 class="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                                    <i data-lucide="trending-up" class="w-4 h-4 text-cyan-400"></i>
+                                    Curva de Custo Total por Tamanho do Lote (Q)
+                                </h4>
+                                <div class="h-64 relative w-full flex-1 min-h-[250px]">
+                                    <canvas id="eoqCurveChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: ABC PARETO ANALYSIS -->
+            <div x-show="activeTab === 'abc-analysis'" class="space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-5 space-y-4">
+                        <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <i data-lucide="layers" class="w-5 h-5 text-amber-400"></i>
+                            Classificação ABC (Pareto)
+                        </h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Divisão do inventário com base no impacto financeiro acumulado (Demanda × Custo Unitário):
+                        </p>
+
+                        <div class="space-y-3 text-xs">
+                            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                                <span class="font-bold text-amber-400 block text-sm mb-1">Classe A (~80% do Valor)</span>
+                                <p class="text-slate-300">Controle rígido e contagens cíclicas frequentes.</p>
+                            </div>
+                            <div class="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                                <span class="font-bold text-blue-400 block text-sm mb-1">Classe B (~15% do Valor)</span>
+                                <p class="text-slate-300">Monitoramento moderado e revisões periódicas.</p>
+                            </div>
+                            <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                                <span class="font-bold text-emerald-400 block text-sm mb-1">Classe C (~5% do Valor)</span>
+                                <p class="text-slate-300">Alto volume de SKUs com baixo valor individual.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-slate-800/60 border border-slate-700/80 rounded-2xl p-5 flex flex-col">
+                        <h3 class="text-base font-bold text-slate-100 mb-2 flex items-center gap-2">
+                            <i data-lucide="bar-chart-2" class="w-5 h-5 text-cyan-400"></i>
+                            Curva de Pareto (% Acumulado de Valor)
+                        </h3>
+                        <div class="h-72 relative w-full flex-1 min-h-[280px]">
+                            <canvas id="paretoChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ABC Table -->
+                <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl overflow-hidden shadow-sm">
+                    <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+                        <h3 class="font-semibold text-slate-100 text-sm">Detalhamento por Impacto de Valor</h3>
+                        <span class="text-xs text-slate-400" x-text="'Total: ' + skus.length + ' SKUs'"></span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-300">
+                            <thead class="text-xs text-slate-400 uppercase bg-slate-900/80 border-b border-slate-700">
+                                <tr>
+                                    <th class="py-3 px-4">Posição</th>
+                                    <th class="py-3 px-4">SKU / Produto</th>
+                                    <th class="py-3 px-4 text-right">Valor Anual Movimentado</th>
+                                    <th class="py-3 px-4 text-center">% Individual</th>
+                                    <th class="py-3 px-4 text-center">% Acumulada</th>
+                                    <th class="py-3 px-4 text-center">Classe ABC</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700/60">
+                                <template x-for="(item, idx) in getABCSortedSKUs()" :key="item.id">
+                                    <tr class="hover:bg-slate-800/40 transition">
+                                        <td class="py-3 px-4 font-bold text-slate-400 text-xs" x-text="'#' + (idx + 1)"></td>
+                                        <td class="py-3 px-4 font-medium text-slate-100">
+                                            <span x-text="item.name"></span>
+                                            <span class="text-xs text-slate-400 font-mono block" x-text="item.code"></span>
+                                        </td>
+                                        <td class="py-3 px-4 text-right font-mono font-bold text-emerald-400" x-text="formatCurrency(item.annualValue)"></td>
+                                        <td class="py-3 px-4 text-center font-mono text-slate-300" x-text="item.percentIndividual.toFixed(2) + '%'"></td>
+                                        <td class="py-3 px-4 text-center font-mono font-semibold text-cyan-400" x-text="item.percentCumulative.toFixed(2) + '%'"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <span class="px-2.5 py-1 rounded-md text-xs font-bold"
+                                                  :class="item.abc === 'A' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : item.abc === 'B' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'"
+                                                  x-text="'Classe ' + item.abc"></span>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: PURCHASE ORDERS & REPLENISHMENT GENERATOR -->
+            <div x-show="activeTab === 'replenishment'" class="space-y-6">
+                <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                                <i data-lucide="shopping-bag" class="w-5 h-5 text-emerald-400"></i>
+                                Sugestão de Pedidos de Compras (MRP Lite)
+                            </h2>
+                            <p class="text-xs text-slate-400">Ordens de compra recomendadas para itens com estoque igual ou abaixo do Ponto de Pedido (ROP).</p>
+                        </div>
+                        <button @click="confirmReplenishAllUrgent()" x-show="getUrgentSKUs().length > 0" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md shadow-emerald-600/20 flex items-center gap-2">
+                            <i data-lucide="check-check" class="w-4 h-4"></i>
+                            <span>Aprovar Todos os Pedidos</span>
+                        </button>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-300">
+                            <thead class="text-xs text-slate-400 uppercase bg-slate-900/80 border-b border-slate-700">
+                                <tr>
+                                    <th class="py-3 px-4">SKU / Produto</th>
+                                    <th class="py-3 px-4 text-center">Estoque Atual</th>
+                                    <th class="py-3 px-4 text-center">Ponto Pedido (ROP)</th>
+                                    <th class="py-3 px-4 text-center text-cyan-400">Lote Sugerido (EOQ)</th>
+                                    <th class="py-3 px-4 text-right">Custo Unitário</th>
+                                    <th class="py-3 px-4 text-right text-emerald-400">Custo Total Lote</th>
+                                    <th class="py-3 px-4 text-center">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700/60">
+                                <template x-for="item in getUrgentSKUs()" :key="item.id">
+                                    <tr class="hover:bg-slate-800/40 transition">
+                                        <td class="py-3 px-4 font-medium text-slate-100">
+                                            <div class="font-semibold" x-text="item.name"></div>
+                                            <div class="text-xs text-slate-400 font-mono" x-text="item.code"></div>
+                                        </td>
+                                        <td class="py-3 px-4 text-center font-bold" :class="item.currentStock <= item.safetyStock ? 'text-rose-400' : 'text-amber-400'" x-text="item.currentStock + ' un'"></td>
+                                        <td class="py-3 px-4 text-center text-slate-300 font-mono" x-text="calcROP(item) + ' un'"></td>
+                                        <td class="py-3 px-4 text-center font-bold text-cyan-400 font-mono" x-text="calcEOQ(item) + ' un'"></td>
+                                        <td class="py-3 px-4 text-right font-mono" x-text="formatCurrency(item.unitCost)"></td>
+                                        <td class="py-3 px-4 text-right font-bold font-mono text-emerald-400" x-text="formatCurrency(calcEOQ(item) * item.unitCost)"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <button @click="triggerReplenish(item.id)" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition">
+                                                Confirmar Pedido
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="getUrgentSKUs().length === 0">
+                                    <tr>
+                                        <td colspan="7" class="py-12 text-center text-slate-400">
+                                            <i data-lucide="package-check" class="w-12 h-12 text-emerald-400 mx-auto mb-3 opacity-80"></i>
+                                            <p class="text-base font-semibold text-slate-200">Estoque Saudável!</p>
+                                            <p class="text-xs text-slate-400 mt-1">Nenhum produto necessita de ordem de compra no momento.</p>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL: ADD / EDIT SKU -->
+    <div x-show="showItemModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-xl p-6 shadow-2xl relative space-y-4" @click.outside="showItemModal = false">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                    <i data-lucide="box" class="w-5 h-5 text-cyan-400"></i>
+                    <span x-text="editingSKU.id ? 'Editar SKU de Inventário' : 'Novo SKU de Inventário'"></span>
+                </h3>
+                <button @click="showItemModal = false" class="text-slate-400 hover:text-slate-200">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveSKU()" class="space-y-4 text-xs">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Código SKU:</label>
+                        <input type="text" x-model="editingSKU.code" required placeholder="EX: SKU-1001" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Categoria:</label>
+                        <input type="text" x-model="editingSKU.category" required placeholder="Eletrônicos, Componentes..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-medium mb-1">Descrição / Nome do Produto:</label>
+                    <input type="text" x-model="editingSKU.name" required placeholder="Nome legível do item..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Custo Unitário (R$):</label>
+                        <input type="number" step="0.01" min="0.01" x-model.number="editingSKU.unitCost" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Demanda Anual (un):</label>
+                        <input type="number" min="1" x-model.number="editingSKU.annualDemand" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Custo de Pedido (R$):</label>
+                        <input type="number" min="1" x-model.number="editingSKU.orderCost" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Estoque Atual:</label>
+                        <input type="number" min="0" x-model.number="editingSKU.currentStock" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Lead Time (Dias):</label>
+                        <input type="number" min="1" x-model.number="editingSKU.leadTimeDays" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Desvio Padrão Demanda:</label>
+                        <input type="number" min="0" x-model.number="editingSKU.stdDevDemand" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 border-t border-slate-700 pt-4 mt-2">
+                    <button type="button" @click="showItemModal = false" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition font-medium">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition font-bold shadow-md shadow-cyan-600/20">Salvar SKU</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CUSTOM CONFIRMATION MODAL (Replaces confirm()) -->
+    <div x-show="confirmModal.show" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4" @click.outside="confirmModal.show = false">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl shrink-0">
+                    <i data-lucide="help-circle" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-100 text-base" x-text="confirmModal.title"></h3>
+                    <p class="text-xs text-slate-400 mt-1" x-text="confirmModal.message"></p>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 border-t border-slate-700 pt-3">
+                <button @click="confirmModal.show = false" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-medium transition">Cancelar</button>
+                <button @click="executeConfirmAction()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-cyan-600/20">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION STACK (Replaces alert()) -->
+    <div class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div class="pointer-events-auto flex items-center space-x-3 px-4 py-3 rounded-xl shadow-xl border text-xs font-medium transition-all transform duration-300"
+                 :class="{
+                    'bg-slate-800 border-emerald-500/50 text-emerald-300': toast.type === 'success',
+                    'bg-slate-800 border-amber-500/50 text-amber-300': toast.type === 'warning',
+                    'bg-slate-800 border-rose-500/50 text-rose-300': toast.type === 'danger',
+                    'bg-slate-800 border-cyan-500/50 text-cyan-300': toast.type === 'info'
+                 }">
+                <i :data-lucide="toast.type === 'success' ? 'check-circle' : toast.type === 'danger' ? 'alert-octagon' : 'info'" class="w-4 h-4 shrink-0"></i>
+                <span x-text="toast.message"></span>
+            </div>
+        </template>
+    </div>
+
+    <!-- Application Logic Script -->
+    <script>
+        // Non-reactive global dictionary for Chart instances (prevents Alpine recursive Proxy errors)
+        const chartInstances = {};
+
+        function inventoryApp() {
+            return {
+                activeTab: 'dashboard',
+                showItemModal: false,
+                searchQuery: '',
+                selectedCategory: 'ALL',
+                selectedABC: 'ALL',
+                selectedStatus: 'ALL',
+                sortField: 'code',
+                sortAsc: true,
+
+                // Toasts & Custom Confirm state
+                toasts: [],
+                confirmModal: {
+                    show: false,
+                    title: '',
+                    message: '',
+                    action: null
+                },
+
+                // Global Settings
+                globalServiceLevel: 95,
+                globalHoldingRate: 0.20,
+                categories: ['Eletrônicos', 'Componentes', 'Insumos', 'Embalagens', 'Ferramentas'],
+
+                // State datasets
+                skus: [],
+                editingSKU: {},
+
+                // Simulator State
+                sim: {
+                    selectedSkuId: null,
+                    annualDemand: 5000,
+                    orderCost: 150,
+                    unitCost: 120,
+                    holdingRate: 0.20,
+                    leadTimeDays: 10,
+                    serviceLevel: 95
+                },
+
+                initApp() {
+                    const savedData = localStorage.getItem('optistock_skus_v2');
+                    if (savedData) {
+                        try {
+                            this.skus = JSON.parse(savedData);
+                        } catch(e) {
+                            this.loadDefaultSKUs();
+                        }
+                    } else {
+                        this.loadDefaultSKUs();
+                    }
+
+                    this.recalculateABC();
+
+                    if (this.skus.length > 0) {
+                        this.sim.selectedSkuId = this.skus[0].id;
+                        this.loadSKUToSimulator();
+                    }
+
+                    this.$nextTick(() => {
+                        lucide.createIcons();
+                        this.initCharts();
+                    });
+                },
+
+                showToast(message, type = 'success') {
+                    const id = Date.now();
+                    this.toasts.push({ id, message, type });
+                    this.$nextTick(() => lucide.createIcons());
+                    setTimeout(() => {
+                        this.toasts = this.toasts.filter(t => t.id !== id);
+                    }, 4000);
+                },
+
+                openConfirm(title, message, action) {
+                    this.confirmModal.title = title;
+                    this.confirmModal.message = message;
+                    this.confirmModal.action = action;
+                    this.confirmModal.show = true;
+                    this.$nextTick(() => lucide.createIcons());
+                },
+
+                executeConfirmAction() {
+                    if (typeof this.confirmModal.action === 'function') {
+                        this.confirmModal.action();
+                    }
+                    this.confirmModal.show = false;
+                },
+
+                switchTab(tab) {
+                    this.activeTab = tab;
+                    this.$nextTick(() => {
+                        lucide.createIcons();
+                        this.updateAllCharts();
+                    });
+                },
+
+                loadDefaultSKUs() {
+                    this.skus = [
+                        { id: 1, code: 'SKU-101', name: 'Processador Octa-Core i7-13k', category: 'Eletrônicos', unitCost: 1250.00, annualDemand: 1800, currentStock: 45, leadTimeDays: 14, orderCost: 200, stdDevDemand: 5 },
+                        { id: 2, code: 'SKU-102', name: 'Placa-Mãe ATX Z690 Gaming', category: 'Eletrônicos', unitCost: 850.00, annualDemand: 2200, currentStock: 180, leadTimeDays: 12, orderCost: 150, stdDevDemand: 6 },
+                        { id: 3, code: 'SKU-103', name: 'Memória RAM DDR5 32GB 6000MHz', category: 'Componentes', unitCost: 450.00, annualDemand: 4500, currentStock: 120, leadTimeDays: 7, orderCost: 100, stdDevDemand: 12 },
+                        { id: 4, code: 'SKU-104', name: 'SSD NVMe 2TB PCIe 4.0', category: 'Componentes', unitCost: 380.00, annualDemand: 5200, currentStock: 420, leadTimeDays: 8, orderCost: 110, stdDevDemand: 15 },
+                        { id: 5, code: 'SKU-105', name: 'Fonte Modular 850W Gold', category: 'Componentes', unitCost: 520.00, annualDemand: 1900, currentStock: 85, leadTimeDays: 10, orderCost: 120, stdDevDemand: 4 },
+                        { id: 6, code: 'SKU-106', name: 'Cabo HDMI 2.1 Reforçado 2m', category: 'Insumos', unitCost: 18.50, annualDemand: 12000, currentStock: 1500, leadTimeDays: 5, orderCost: 40, stdDevDemand: 30 },
+                        { id: 7, code: 'SKU-107', name: 'Caixa de Papelão Reforçada T3', category: 'Embalagens', unitCost: 4.20, annualDemand: 25000, currentStock: 1100, leadTimeDays: 3, orderCost: 30, stdDevDemand: 50 },
+                        { id: 8, code: 'SKU-108', name: 'Pasta Térmica Alta Condutividade', category: 'Insumos', unitCost: 25.00, annualDemand: 8000, currentStock: 350, leadTimeDays: 6, orderCost: 50, stdDevDemand: 20 },
+                        { id: 9, code: 'SKU-109', name: 'Kit Chaves de Precisão Eletrônica', category: 'Ferramentas', unitCost: 95.00, annualDemand: 1500, currentStock: 210, leadTimeDays: 15, orderCost: 80, stdDevDemand: 3 }
+                    ];
+                    this.saveToStorage();
+                },
+
+                saveToStorage() {
+                    localStorage.setItem('optistock_skus_v2', JSON.stringify(this.skus));
+                },
+
+                confirmResetData() {
+                    this.openConfirm(
+                        'Restaurar Dados Originais?',
+                        'Esta ação irá substituir todas as modificações atuais pelos dados de demonstração.',
+                        () => {
+                            this.loadDefaultSKUs();
+                            this.recalculateABC();
+                            this.updateAllCharts();
+                            this.showToast('Dados de demonstração restaurados!', 'info');
+                        }
+                    );
+                },
+
+                getZScore(serviceLevel = 95) {
+                    switch (parseInt(serviceLevel)) {
+                        case 90: return 1.28;
+                        case 95: return 1.65;
+                        case 98: return 2.05;
+                        case 99: return 2.33;
+                        default: return 1.65;
+                    }
+                },
+
+                calcEOQ(item) {
+                    if (!item) return 0;
+                    const D = item.annualDemand;
+                    const S = item.orderCost || 120;
+                    const H = item.unitCost * this.globalHoldingRate;
+                    if (H <= 0 || D <= 0) return 0;
+                    return Math.round(Math.sqrt((2 * D * S) / H));
+                },
+
+                calcSafetyStock(item) {
+                    if (!item) return 0;
+                    const Z = this.getZScore(this.globalServiceLevel);
+                    const stdDev = item.stdDevDemand || (item.annualDemand * 0.05 / 12);
+                    const ltFactor = Math.sqrt(item.leadTimeDays / 30);
+                    return Math.ceil(Z * stdDev * ltFactor);
+                },
+
+                calcROP(item) {
+                    if (!item) return 0;
+                    const dailyDemand = item.annualDemand / 365;
+                    const ss = this.calcSafetyStock(item);
+                    return Math.ceil((dailyDemand * item.leadTimeDays) + ss);
+                },
+
+                recalculateABC() {
+                    let totalValue = 0;
+                    this.skus.forEach(sku => {
+                        sku.annualValue = sku.annualDemand * sku.unitCost;
+                        totalValue += sku.annualValue;
+                    });
+
+                    const sorted = [...this.skus].sort((a, b) => b.annualValue - a.annualValue);
+
+                    let accumulated = 0;
+                    sorted.forEach(sku => {
+                        sku.percentIndividual = totalValue > 0 ? (sku.annualValue / totalValue) * 100 : 0;
+                        accumulated += sku.percentIndividual;
+                        sku.percentCumulative = accumulated;
+
+                        if (sku.percentCumulative <= 75) {
+                            sku.abc = 'A';
+                        } else if (sku.percentCumulative <= 92) {
+                            sku.abc = 'B';
+                        } else {
+                            sku.abc = 'C';
+                        }
+                    });
+                },
+
+                get totalInventoryValue() {
+                    return this.skus.reduce((sum, item) => sum + (item.currentStock * item.unitCost), 0);
+                },
+
+                get totalHoldingCost() {
+                    return this.skus.reduce((sum, item) => sum + (item.currentStock * item.unitCost * this.globalHoldingRate), 0);
+                },
+
+                get averageTurnover() {
+                    if (this.totalInventoryValue === 0) return 0;
+                    const totalCOGS = this.skus.reduce((sum, item) => sum + (item.annualDemand * item.unitCost), 0);
+                    return totalCOGS / this.totalInventoryValue;
+                },
+
+                get reorderAlertCount() {
+                    return this.skus.filter(s => s.currentStock <= this.calcROP(s)).length;
+                },
+
+                get criticalCount() {
+                    return this.skus.filter(s => s.currentStock <= this.calcSafetyStock(s)).length;
+                },
+
+                get abcClassA() { return this.skus.filter(s => s.abc === 'A'); },
+                get abcClassB() { return this.skus.filter(s => s.abc === 'B'); },
+                get abcClassC() { return this.skus.filter(s => s.abc === 'C'); },
+
+                getUrgentSKUs() {
+                    return this.skus.filter(s => s.currentStock <= this.calcROP(s));
+                },
+
+                getABCSortedSKUs() {
+                    return [...this.skus].sort((a, b) => b.annualValue - a.annualValue);
+                },
+
+                get filteredSKUs() {
+                    return this.skus.filter(sku => {
+                        const matchesSearch = sku.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || 
+                                              sku.code.toLowerCase().includes(this.searchQuery.toLowerCase());
+                        const matchesCategory = this.selectedCategory === 'ALL' || sku.category === this.selectedCategory;
+                        const matchesABC = this.selectedABC === 'ALL' || sku.abc === this.selectedABC;
+                        
+                        let matchesStatus = true;
+                        const rop = this.calcROP(sku);
+                        const ss = this.calcSafetyStock(sku);
+                        const eoq = this.calcEOQ(sku);
+
+                        if (this.selectedStatus === 'CRITICAL') matchesStatus = sku.currentStock <= ss;
+                        else if (this.selectedStatus === 'REORDER') matchesStatus = sku.currentStock <= rop && sku.currentStock > ss;
+                        else if (this.selectedStatus === 'OPTIMAL') matchesStatus = sku.currentStock > rop && sku.currentStock <= (rop + eoq * 1.5);
+                        else if (this.selectedStatus === 'OVERSTOCK') matchesStatus = sku.currentStock > (rop + eoq * 1.5);
+
+                        return matchesSearch && matchesCategory && matchesABC && matchesStatus;
+                    }).sort((a, b) => {
+                        let res = 0;
+                        if (a[this.sortField] > b[this.sortField]) res = 1;
+                        if (a[this.sortField] < b[this.sortField]) res = -1;
+                        return this.sortAsc ? res : -res;
+                    });
+                },
+
+                sortBy(field) {
+                    if (this.sortField === field) {
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortField = field;
+                        this.sortAsc = true;
+                    }
+                },
+
+                formatCurrency(val) {
+                    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+                },
+
+                adjustStock(sku, amount) {
+                    sku.currentStock = Math.max(0, sku.currentStock + amount);
+                    this.saveToStorage();
+                    this.updateAllCharts();
+                    this.showToast(`Estoque de ${sku.code} alterado para ${sku.currentStock} un.`, amount > 0 ? 'info' : 'warning');
+                },
+
+                getStockColorClass(sku) {
+                    const rop = this.calcROP(sku);
+                    const ss = this.calcSafetyStock(sku);
+                    if (sku.currentStock <= ss) return 'text-rose-400 font-extrabold';
+                    if (sku.currentStock <= rop) return 'text-amber-400 font-bold';
+                    return 'text-emerald-400';
+                },
+
+                getStatusBadgeHTML(sku) {
+                    const rop = this.calcROP(sku);
+                    const ss = this.calcSafetyStock(sku);
+                    const eoq = this.calcEOQ(sku);
+
+                    if (sku.currentStock <= ss) {
+                        return `<span class="px-2 py-0.5 rounded text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold">Crítico</span>`;
+                    } else if (sku.currentStock <= rop) {
+                        return `<span class="px-2 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold">Abaixo ROP</span>`;
+                    } else if (sku.currentStock > (rop + eoq * 1.8)) {
+                        return `<span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">Excesso</span>`;
+                    }
+                    return `<span class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium">Ideal</span>`;
+                },
+
+                openNewItemModal() {
+                    this.editingSKU = {
+                        id: null,
+                        code: 'SKU-' + (100 + this.skus.length + 1),
+                        name: '',
+                        category: 'Componentes',
+                        unitCost: 100,
+                        annualDemand: 1000,
+                        currentStock: 150,
+                        leadTimeDays: 10,
+                        orderCost: 100,
+                        stdDevDemand: 10
+                    };
+                    this.showItemModal = true;
+                },
+
+                openEditModal(sku) {
+                    this.editingSKU = JSON.parse(JSON.stringify(sku));
+                    this.showItemModal = true;
+                },
+
+                saveSKU() {
+                    if (this.editingSKU.id) {
+                        const idx = this.skus.findIndex(s => s.id === this.editingSKU.id);
+                        if (idx !== -1) this.skus[idx] = this.editingSKU;
+                        this.showToast(`SKU ${this.editingSKU.code} atualizado!`, 'success');
+                    } else {
+                        this.editingSKU.id = Date.now();
+                        this.skus.push(this.editingSKU);
+                        this.showToast(`SKU ${this.editingSKU.code} cadastrado!`, 'success');
+                    }
+                    this.showItemModal = false;
+                    this.recalculateABC();
+                    this.saveToStorage();
+                    this.updateAllCharts();
+                },
+
+                confirmDeleteSKU(id) {
+                    const item = this.skus.find(s => s.id === id);
+                    if (!item) return;
+
+                    this.openConfirm(
+                        `Excluir ${item.code}?`,
+                        `Deseja realmente remover "${item.name}" do cadastro de inventário?`,
+                        () => {
+                            this.skus = this.skus.filter(s => s.id !== id);
+                            this.recalculateABC();
+                            this.saveToStorage();
+                            this.updateAllCharts();
+                            this.showToast(`SKU ${item.code} removido.`, 'danger');
+                        }
+                    );
+                },
+
+                triggerReplenish(skuId) {
+                    const item = this.skus.find(s => s.id === skuId);
+                    if (item) {
+                        const eoq = this.calcEOQ(item);
+                        item.currentStock += eoq;
+                        this.saveToStorage();
+                        this.updateAllCharts();
+                        this.showToast(`Pedido confirmado! +${eoq} un adicionadas ao estoque do ${item.name}.`, 'success');
+                    }
+                },
+
+                confirmReplenishAllUrgent() {
+                    const urgent = this.getUrgentSKUs();
+                    if (urgent.length === 0) return;
+
+                    this.openConfirm(
+                        'Aprovar Todos os Pedidos?',
+                        `Gerar ordens de reabastecimento automáticas para todos os ${urgent.length} produtos necessitando reposição?`,
+                        () => {
+                            urgent.forEach(item => {
+                                const eoq = this.calcEOQ(item);
+                                item.currentStock += eoq;
+                            });
+                            this.saveToStorage();
+                            this.updateAllCharts();
+                            this.showToast('Todas as ordens de reposição foram processadas!', 'success');
+                        }
+                    );
+                },
+
+                openSimulatorForSKU(sku) {
+                    this.sim.selectedSkuId = sku.id;
+                    this.loadSKUToSimulator();
+                    this.switchTab('eoq-calculator');
+                },
+
+                loadSKUToSimulator() {
+                    const item = this.skus.find(s => s.id == this.sim.selectedSkuId);
+                    if (item) {
+                        this.sim.annualDemand = item.annualDemand;
+                        this.sim.orderCost = item.orderCost || 120;
+                        this.sim.unitCost = item.unitCost;
+                        this.sim.leadTimeDays = item.leadTimeDays;
+                        this.updateEOQChart();
+                    }
+                },
+
+                calcSimEOQ() {
+                    const D = this.sim.annualDemand;
+                    const S = this.sim.orderCost;
+                    const H = this.sim.unitCost * this.sim.holdingRate;
+                    if (H <= 0 || D <= 0) return 0;
+                    return Math.round(Math.sqrt((2 * D * S) / H));
+                },
+
+                calcSimSafetyStock() {
+                    const Z = this.getZScore(this.sim.serviceLevel);
+                    const stdDev = this.sim.annualDemand * 0.05 / 12;
+                    return Math.ceil(Z * stdDev * Math.sqrt(this.sim.leadTimeDays / 30));
+                },
+
+                calcSimROP() {
+                    const daily = this.sim.annualDemand / 365;
+                    return Math.ceil((daily * this.sim.leadTimeDays) + this.calcSimSafetyStock());
+                },
+
+                calcSimMinCost() {
+                    const Q = this.calcSimEOQ();
+                    if (Q === 0) return 0;
+                    const D = this.sim.annualDemand;
+                    const S = this.sim.orderCost;
+                    const H = this.sim.unitCost * this.sim.holdingRate;
+                    
+                    const orderingCost = (D / Q) * S;
+                    const holdingCost = (Q / 2) * H;
+                    const totalPurchaseCost = D * this.sim.unitCost;
+                    return orderingCost + holdingCost + totalPurchaseCost;
+                },
+
+                exportCSV() {
+                    let csv = 'Codigo,Nome,Categoria,CustoUnitario,DemandaAnual,EstoqueAtual,EstoqueSeguranca,ROP,EOQ,ClasseABC\n';
+                    this.skus.forEach(s => {
+                        csv += `"${s.code}","${s.name}","${s.category}",${s.unitCost},${s.annualDemand},${s.currentStock},${this.calcSafetyStock(s)},${this.calcROP(s)},${this.calcEOQ(s)},"${s.abc}"\n`;
+                    });
+
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `OptiStock_Relatorio_${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    this.showToast('Relatório CSV exportado com sucesso!', 'info');
+                },
+
+                updateAllCharts() {
+                    this.$nextTick(() => {
+                        this.updateStockChart();
+                        this.updateABCPieChart();
+                        this.updateParetoChart();
+                        this.updateEOQChart();
+                    });
+                },
+
+                initCharts() {
+                    // Chart 1: Stock vs ROP
+                    const ctxStock = document.getElementById('stockStatusChart')?.getContext('2d');
+                    if (ctxStock) {
+                        chartInstances.stock = new Chart(ctxStock, {
+                            type: 'bar',
+                            data: { labels: [], datasets: [] },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                                scales: {
+                                    x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                                }
+                            }
+                        });
+                    }
+
+                    // Chart 2: ABC Pie Chart
+                    const ctxPie = document.getElementById('abcPieChart')?.getContext('2d');
+                    if (ctxPie) {
+                        chartInstances.pie = new Chart(ctxPie, {
+                            type: 'doughnut',
+                            data: { labels: ['Classe A', 'Classe B', 'Classe C'], datasets: [] },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } }
+                            }
+                        });
+                    }
+
+                    // Chart 3: Pareto Curve
+                    const ctxPareto = document.getElementById('paretoChart')?.getContext('2d');
+                    if (ctxPareto) {
+                        chartInstances.pareto = new Chart(ctxPareto, {
+                            type: 'bar',
+                            data: { labels: [], datasets: [] },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                                scales: {
+                                    x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' }, max: 100 }
+                                }
+                            }
+                        });
+                    }
+
+                    // Chart 4: EOQ Cost Curve
+                    const ctxEOQ = document.getElementById('eoqCurveChart')?.getContext('2d');
+                    if (ctxEOQ) {
+                        chartInstances.eoq = new Chart(ctxEOQ, {
+                            type: 'line',
+                            data: { labels: [], datasets: [] },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: { intersect: false, mode: 'index' },
+                                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                                scales: {
+                                    x: { title: { display: true, text: 'Tamanho do Lote (Q)', color: '#94a3b8' }, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                                    y: { title: { display: true, text: 'Custo Anual (R$)', color: '#94a3b8' }, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                                }
+                            }
+                        });
+                    }
+
+                    this.updateAllCharts();
+                },
+
+                updateStockChart() {
+                    if (!chartInstances.stock) return;
+                    const labels = this.skus.map(s => s.code);
+                    const current = this.skus.map(s => s.currentStock);
+                    const rop = this.skus.map(s => this.calcROP(s));
+                    const ss = this.skus.map(s => this.calcSafetyStock(s));
+
+                    chartInstances.stock.data = {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Estoque Atual', data: current, backgroundColor: '#0284c7', borderRadius: 4 },
+                            { label: 'Ponto de Pedido (ROP)', data: rop, backgroundColor: '#f59e0b', borderRadius: 4 },
+                            { label: 'Estoque de Segurança', data: ss, backgroundColor: '#f43f5e', borderRadius: 4 }
+                        ]
+                    };
+                    chartInstances.stock.update();
+                    chartInstances.stock.resize();
+                },
+
+                updateABCPieChart() {
+                    if (!chartInstances.pie) return;
+                    const valA = this.abcClassA.reduce((sum, s) => sum + s.annualValue, 0);
+                    const valB = this.abcClassB.reduce((sum, s) => sum + s.annualValue, 0);
+                    const valC = this.abcClassC.reduce((sum, s) => sum + s.annualValue, 0);
+
+                    chartInstances.pie.data.datasets = [{
+                        data: [valA, valB, valC],
+                        backgroundColor: ['#f59e0b', '#3b82f6', '#10b981'],
+                        borderWidth: 0
+                    }];
+                    chartInstances.pie.update();
+                    chartInstances.pie.resize();
+                },
+
+                updateParetoChart() {
+                    if (!chartInstances.pareto) return;
+                    const sorted = this.getABCSortedSKUs();
+                    const labels = sorted.map(s => s.code);
+                    const cumulative = sorted.map(s => s.percentCumulative);
+
+                    chartInstances.pareto.data = {
+                        labels: labels,
+                        datasets: [
+                            {
+                                type: 'line',
+                                label: '% Valor Acumulado',
+                                data: cumulative,
+                                borderColor: '#06b6d4',
+                                borderWidth: 3,
+                                tension: 0.3,
+                                fill: false
+                            }
+                        ]
+                    };
+                    chartInstances.pareto.update();
+                    chartInstances.pareto.resize();
+                },
+
+                updateEOQChart() {
+                    if (!chartInstances.eoq) return;
+                    const eoqOpt = this.calcSimEOQ();
+                    if (eoqOpt <= 0) return;
+
+                    const rangeStep = Math.max(10, Math.round(eoqOpt / 8));
+                    const labels = [];
+                    const orderingCosts = [];
+                    const holdingCosts = [];
+                    const totalCosts = [];
+
+                    const D = this.sim.annualDemand;
+                    const S = this.sim.orderCost;
+                    const H = this.sim.unitCost * this.sim.holdingRate;
+
+                    for (let q = Math.max(10, eoqOpt - (rangeStep * 6)); q <= eoqOpt + (rangeStep * 6); q += rangeStep) {
+                        labels.push(q);
+                        const cOrder = (D / q) * S;
+                        const cHolding = (q / 2) * H;
+                        orderingCosts.push(cOrder);
+                        holdingCosts.push(cHolding);
+                        totalCosts.push(cOrder + cHolding);
+                    }
+
+                    chartInstances.eoq.data = {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Custo Total Mínimo', data: totalCosts, borderColor: '#a855f7', borderWidth: 3, fill: false, tension: 0.3 },
+                            { label: 'Custo de Pedido (S)', data: orderingCosts, borderColor: '#f59e0b', borderWidth: 2, borderDash: [5, 5], fill: false },
+                            { label: 'Custo de Posse (H)', data: holdingCosts, borderColor: '#10b981', borderWidth: 2, borderDash: [5, 5], fill: false }
+                        ]
+                    };
+                    chartInstances.eoq.update();
+                    chartInstances.eoq.resize();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
